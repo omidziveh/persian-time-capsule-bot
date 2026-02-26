@@ -1,7 +1,3 @@
-Here is the updated and finalized documentation. I have removed the "Show Another" feature and refined the "Staged Updates" architecture to focus on safe deployment of new features.
-
-***
-
 # Histo-gram 3.0 - Project Documentation
 
 ## 1. Project Overview
