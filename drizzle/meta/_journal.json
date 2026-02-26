@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1772087159996,
+      "tag": "0000_overjoyed_pride",
+      "breakpoints": true
+    }
+  ]
+}
