@@ -1,172 +1,140 @@
-# Histo-Gram: Daily Art Bot 🎨
-## Version: 2.1.0
+Here is the updated and finalized documentation. I have removed the "Show Another" feature and refined the "Staged Updates" architecture to focus on safe deployment of new features.
 
-A robust, serverless Telegram bot that delivers a daily piece of art and history from The Metropolitan Museum of Art's collection. Built with TypeScript and Cloudflare Workers, it's designed for high reliability and zero maintenance.
+***
 
-Every day, it selects a new artifact, uses AI to generate a description, and sends it directly to all subscribed users.
+# Histo-gram 3.0 - Project Documentation
 
-## ✨ Features
+## 1. Project Overview
+**Vision:** A high-quality Telegram bot delivering 2-3 significant historical events daily in Persian.
+**Core Philosophy:** "Editor-First Architecture." The bot serves as a publisher for high-end, manually curated content, ensuring quality control and system stability.
 
--   **🤖 Serverless & Scalable**: Runs on Cloudflare's global network, meaning it's fast, reliable, and has virtually no maintenance overhead.
--   **🖼️ Intelligent Media Sending**: Fetches high-quality images from The Met's API and sends them in a group. If an image fails to load, it intelligently retries with the remaining images, ensuring the user always gets content.
--   **🧠 AI-Powered Descriptions**: Integrates with an AI API to generate engaging, informative descriptions for each art piece.
--   **📝 Robust Text Formatting**: Uses HTML for message formatting, which is more reliable and less prone to errors than Markdown.
--   **🔒 Bulletproof Broadcasting**: Includes a sophisticated retry mechanism to handle temporary network issues, ensuring messages are delivered successfully.
--   **🛡️ Secure & Type-Safe**: Written in TypeScript to prevent common bugs and ensure code quality.
--   **📊 Comprehensive Logging**: Provides detailed logs for easy debugging and monitoring.
--   **👥 Beta Testing**: Includes admin-only commands for instant testing and user management.
+**Key Features:**
+*   **Persian History:** Focus on Iranian and World history tailored for a Persian audience.
+*   **Date Formatting:** Display dates in **Shahanshahi** format with **Jalali** in parentheses.
+*   **Smart Inventory:** Automated warnings when content stock runs low.
+*   **Staged Deployment:** New features are tested by a dedicated group before public release.
 
-## 🚀 Quick Start
+---
 
-This project is designed to be deployed on Cloudflare Workers. You cannot run it locally.
+## 2. Infrastructure & Tech Stack
+*   **Language:** TypeScript (Strict Mode).
+*   **Runtime:** **Cloudflare Workers** (Serverless, Global Edge).
+*   **Database:** **Cloudflare D1** (SQLite at the Edge).
+*   **ORM:** **Drizzle ORM** (Type-safe SQL interactions).
+*   **Bot Framework:** **GrammY** (using Webhooks).
+*   **Scheduling:** **Cloudflare Cron Triggers**.
 
-### Prerequisites
+---
 
--   A [Cloudflare](https://www.cloudflare.com/) account (the free tier is sufficient).
--   A Telegram account.
--   The [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/install/) installed.
--   API keys for:
-    -   [The Met Museum API](https://metmuseum.github.io/) (Free)
-    -   An AI service (e.g., OpenRouter.ai)
-    -   A translation service (e.g., Google Translate API)
+## 3. Project Foundation (Upgrade Strategy)
+To ensure the bot can be upgraded easily without breaking the live experience for users, the architecture follows a **Role-Based Access Control (RBAC)** pattern.
 
-### 1. Clone the Repository
+### A. The Database Foundation
+The `subscribers` table will have a `role` column.
+*   **Roles:** `admin`, `tester`, `user`.
+*   **Purpose:** This allows the code to branch logic based on who is using it.
 
-```bash
-git clone https://github.com/omidziveh/histo-gram.git
-cd histo-gram
+### B. The "Canary" Deployment Flow
+When you code a new feature (e.g., a new settings menu), the workflow is:
+1.  **Code & Deploy:** You push the new code to the Cloudflare Worker.
+2.  **Feature Flag Logic:**
+    *   The code checks: `if (user.role === 'tester' || user.role === 'admin')` -> Show New Feature.
+    *   `else` -> Show Old Stable Version.
+3.  **Testing:** You and your tester group use the bot. The new feature is active for you, but invisible to normal users.
+4.  **Publish:** Once verified that the feature is stable and doesn't crash the bot, you push a config update to enable it for `user` role as well.
+
+**Benefit:** You never have to take the bot offline to add features. Normal users always see a stable version while you test changes in the production environment.
+
+---
+
+## 4. The Content Workflow
+
+### A. Content Management (The Inventory System)
+The bot maintains a "stock" of historical events.
+
+1.  **Bulk Ingestion:**
+    *   You generate content (e.g., 60 days' worth) using high-end AI models externally.
+    *   You send this data to the bot via the Admin Panel.
+    *   **Logic:** The bot parses the raw text and saves it. It allows storing multiple events for a single day.
+2.  **Low Stock Warning:**
+    *   Every night, the bot checks the inventory.
+    *   **Trigger:** If the number of days with available content drops below **5 days**, the bot sends an alert to the Admin Chat: *"Warning: Content stock is low. Only 4 days remaining. Please restock."*
+
+### B. The "Nightly Preview" & Approval
+Every night (e.g., 11:00 PM), the bot prepares the content for the next day.
+
+1.  **Preview Message:** The bot sends the proposed post to the **Admin Chat**.
+2.  **Action Buttons:** The Admin has three options:
+    *   **✅ Approve (or Ignore):** The content is scheduled for sending.
+    *   **🔄 Retry:** The bot discards this specific event and fetches a *different* event for the same date from the database (if available).
+    *   **🚫 Don't Send:** The bot cancels the post for this date. No message is sent to users the next morning.
+
+---
+
+## 5. User Features
+
+### A. Standard Broadcast
+Users receive the daily historical event automatically at the scheduled time (e.g., 9:00 AM).
+
+**Message Format:**
+```markdown
+📅 [Shahanshahi Date] ([Jalali Date])
+
+[Image]
+
+[Title]
+[Description...]
+
+#Hashtags
 ```
+*Calculation Logic:* Shahanshahi Year = Jalali Year + 1180.
 
-### 2. Install Dependencies
+### B. Lifecycle Management
+*   **Welcome (`/start`):** A welcoming message in Persian explaining the bot's purpose and schedule.
+*   **Goodbye (`/stop`):** Handled gracefully. The bot logs the user's departure and removes them from the subscriber list.
 
-```bash
-npm install
-```
+---
 
-### 3. Configure Wrangler
+## 6. Database Schema (Draft)
 
-Log in to your Cloudflare account:
+**Table: `events`**
+*   `id`: UUID
+*   `jalali_month`: Int
+*   `jalali_day`: Int
+*   `content_text`: Text (Persian)
+*   `content_title`: Text
+*   `historical_year`: String (Used for the date calculation)
+*   `image_url`: Text
+*   `is_approved`: Boolean (Default: false) - *Set to true after Admin Approves.*
+*   `created_at`: Datetime
 
-```bash
-wrangler login
-```
+**Table: `subscribers`**
+*   `user_id`: BigInt (Primary Key)
+*   `role`: Enum ('admin', 'tester', 'user') - *Critical for the upgrade strategy.*
+*   `joined_at`: Datetime
 
-### 4. Set Up Your Database
+---
 
-Create a D1 database for the bot:
+## 7. Development Roadmap
 
-```bash
-wrangler d1 create histo-gram-db
-```
+### Phase 1: Foundation
+1.  Initialize Cloudflare Worker project with TypeScript.
+2.  Setup D1 Database and Drizzle ORM.
+3.  Implement the Schema.
+4.  Deploy basic bot skeleton to Cloudflare.
 
-Copy the `database_id` from the output and add it to your `wrangler.jsonc` file.
+### Phase 2: The Admin & Ingestion
+1.  Build the **Admin Ingestion Tool** (parsing raw text into the DB).
+2.  Implement the **Low Stock Warning** logic.
+3.  Test data storage and retrieval.
 
-Create the necessary tables by running the schema file:
+### Phase 3: The Publisher
+1.  Implement the **Nightly Preview** logic.
+2.  Implement the "Approve/Retry/Skip" interface.
+3.  Implement the **Shahanshahi Date Conversion** logic ($Jalali + 1180$).
+4.  Implement the daily broadcast Cron Job.
 
-```bash
-wrangler d1 execute histo-gram-db --file=./src/db/schema.sql --remote --yes
-```
-
-Populate your `objects` table with the IDs from your SQL file:
-
-```bash
-wrangler d1 execute histo-gram-db --file=./path/to/your/objects.sql --remote --yes
-```
-
-### 5. Set Up Secrets
-
-Store your secret API keys and tokens using Wrangler. Do not put them in your code.
-
-```bash
-# Your Bot Token from @BotFather
-wrangler secret put BOT_TOKEN
-
-# Your AI API Key
-wrangler secret put AI_API_KEY
-
-# Your Translation API Key
-wrangler secret put TRANSLATION_API_KEY
-
-# Your personal Chat ID for admin commands
-wrangler secret put ADMIN_CHAT_ID
-```
-
-### 6. Deploy the Bot
-
-Deploy your worker to Cloudflare:
-
-```bash
-wrangler deploy
-```
-
-### 7. Set the Webhook
-
-Tell Telegram to send updates to your new Worker:
-
-```bash
-# Replace <YOUR_BOT_TOKEN> and <YOUR_WORKER_URL>
-curl -X POST "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook?url=<YOUR_WORKER_URL>"
-```
-
-## 📋 Available Commands
-
--   `/start`: Subscribe to the daily broadcast.
--   `/stop`: Unsubscribe from the daily broadcast.
--   `/listusers` (Admin Only): Lists all subscribed users.
--   `/testbroadcast` (Admin Only): Instantly runs the broadcast process for testing.
--   `/updateusernames` (Admin Only): Updates the database with the latest usernames for all users.
-
-## 🛠️ Development
-
-### Project Structure
-
-```
-/src
-├── index.ts                 # Main entry point and router
-├── handlers/
-│   ├── webhook.ts           # Handles incoming Telegram updates
-│   └── scheduled.ts         # Handles the daily cron trigger
-├── bot/
-│   └── commands.ts          # Logic for each bot command
-├── services/
-│   ├── telegramApi.ts       # Functions for sending messages to Telegram
-│   ├── objectApi.ts         # Functions for fetching data from The Met API
-│   ├── aiApi.ts             # Functions for interacting with the AI service
-│   └── translationApi.ts    # Functions for translating text
-├── db/
-│   ├── schema.sql           # Database table definitions
-│   └── queries.ts           # Functions for interacting with the D1 database
-├── types/
-│   └── index.ts             # TypeScript type definitions
-└── utils/
-    ├── logger.ts            # Centralized logging utility
-    ├── markdown.ts          # Utilities for text formatting
-    ├── rateLimiter.ts       # Rate limiting logic
-    └── retry.ts             # Generic retry mechanism for API calls
-```
-
-### Viewing Logs
-
-To see real-time logs from your deployed Worker, run:
-
-```bash
-wrangler tail
-```
-
-### Changing the Schedule
-
-To change the daily broadcast time, modify the `cron` expression in your `wrangler.jsonc` file. For example, to run it at 8:00 AM UTC every day:
-
-```jsonc
-"triggers": {
-  "crons": [
-    "0 8 * * *"
-  ]
-}
-```
-
-After changing the schedule, redeploy with `wrangler deploy`.
-
-## 📄 License
-
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+### Phase 4: Polish & Lifecycle
+1.  Implement **Welcome/Goodbye** messages.
+2.  Setup the **Tester Role** logic for future updates.
+3.  Final styling and error handling.
